@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Voice Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #f0f0f0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 16px;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    #conversation {
+      flex: 1;
+      width: 100%;
+      max-width: 640px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px 0;
+    }
+
+    .message {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .message.user {
+      align-self: flex-end;
+      background: #2563eb;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      background: #1e1e1e;
+      color: #f0f0f0;
+      border-bottom-left-radius: 4px;
+    }
+
+    .message.assistant.streaming {
+      border-left: 2px solid #7c3aed;
+    }
+
+    .message.system {
+      align-self: center;
+      background: transparent;
+      color: #555;
+      font-size: 0.8rem;
+      font-style: italic;
+    }
+
+    #controls {
+      width: 100%;
+      max-width: 640px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    #status {
+      font-size: 0.85rem;
+      color: #666;
+      height: 20px;
+      transition: color 0.2s;
+    }
+
+    #status.listening { color: #ef4444; }
+    #status.thinking  { color: #7c3aed; }
+    #status.speaking  { color: #10b981; }
+
+    #mic-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: none;
+      background: #1e1e1e;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 0 0 0 rgba(239,68,68,0);
+      position: relative;
+    }
+
+    #mic-btn:hover { background: #2a2a2a; transform: scale(1.05); }
+
+    #mic-btn.listening {
+      background: #ef4444;
+      animation: pulse 1.5s infinite;
+    }
+
+    #mic-btn.thinking { background: #7c3aed; }
+    #mic-btn.speaking { background: #10b981; }
+
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      70%  { box-shadow: 0 0 0 20px rgba(239,68,68,0); }
+      100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    }
+
+    #mic-btn svg { width: 32px; height: 32px; fill: #fff; transition: fill 0.2s; }
+
+    #bottom-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .icon-btn {
+      background: #1e1e1e;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+
+    .icon-btn:hover { background: #2a2a2a; color: #aaa; }
+
+    #lang-select {
+      background: #1e1e1e;
+      border: 1px solid #333;
+      color: #aaa;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    #lang-select:focus { outline: none; border-color: #555; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Claude Voice Agent</h1>
+  <p>Mantén presionado el botón para hablar</p>
+</header>
+
+<div id="conversation">
+  <div class="message system">Haz clic en el micrófono para comenzar</div>
+</div>
+
+<div id="controls">
+  <div id="status">Listo</div>
+
+  <button id="mic-btn" title="Mantén para hablar / clic para hablar">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-2 15.9A8 8 0 0 0 20 11h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 6 7.9V21H7v2h10v-2h-3v-2.1z"/>
+    </svg>
+  </button>
+
+  <div id="bottom-row">
+    <select id="lang-select" title="Idioma de reconocimiento de voz">
+      <option value="es-ES">🇪🇸 Español</option>
+      <option value="en-US">🇺🇸 English</option>
+      <option value="es-MX">🇲🇽 Español MX</option>
+    </select>
+
+    <button class="icon-btn" id="mute-btn" title="Silenciar/activar voz">
+      🔊 Voz
+    </button>
+
+    <button class="icon-btn" id="clear-btn" title="Limpiar conversación">
+      🗑 Limpiar
+    </button>
+  </div>
+</div>
+
+<script>
+  const sessionId = crypto.randomUUID();
+  const conv = document.getElementById('conversation');
+  const micBtn = document.getElementById('mic-btn');
+  const statusEl = document.getElementById('status');
+  const muteBtn = document.getElementById('mute-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const langSelect = document.getElementById('lang-select');
+
+  let recognition = null;
+  let synth = window.speechSynthesis;
+  let voiceMuted = false;
+  let isListening = false;
+  let isBusy = false;
+  let currentUtterance = null;
+
+  // --- Speech Recognition ---
+  function setupRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setStatus('Tu browser no soporta reconocimiento de voz. Usa Chrome.', '');
+      micBtn.disabled = true;
+      return null;
+    }
+
+    const r = new SpeechRecognition();
+    r.lang = langSelect.value;
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    r.continuous = false;
+
+    r.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      stopListening();
+      handleUserMessage(text);
+    };
+
+    r.onerror = (e) => {
+      stopListening();
+      if (e.error !== 'aborted') setStatus(`Error: ${e.error}`, '');
+    };
+
+    r.onend = () => {
+      if (isListening) stopListening();
+    };
+
+    return r;
+  }
+
+  function startListening() {
+    if (isBusy) return;
+
+    // Stop any ongoing speech
+    if (currentUtterance) {
+      synth.cancel();
+      currentUtterance = null;
+    }
+
+    recognition = setupRecognition();
+    if (!recognition) return;
+    recognition.lang = langSelect.value;
+
+    try {
+      recognition.start();
+      isListening = true;
+      micBtn.classList.add('listening');
+      setStatus('Escuchando...', 'listening');
+    } catch (err) {
+      setStatus('No se pudo iniciar el micrófono', '');
+    }
+  }
+
+  function stopListening() {
+    isListening = false;
+    micBtn.classList.remove('listening');
+    if (recognition) { try { recognition.stop(); } catch {} recognition = null; }
+  }
+
+  // --- Send to Claude ---
+  async function handleUserMessage(text) {
+    if (!text.trim()) return;
+    isBusy = true;
+
+    addMessage('user', text);
+    setStatus('Claude está pensando...', 'thinking');
+    micBtn.classList.add('thinking');
+
+    const assistantEl = addMessage('assistant', '', true);
+
+    try {
+      const resp = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, sessionId }),
+      });
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const lines = decoder.decode(value).split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.chunk) {
+              fullText += data.chunk;
+              assistantEl.textContent = fullText;
+              conv.scrollTop = conv.scrollHeight;
+            }
+            if (data.done) {
+              assistantEl.classList.remove('streaming');
+              speakText(fullText);
+            }
+            if (data.error) {
+              assistantEl.textContent = data.error;
+              assistantEl.classList.remove('streaming');
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      assistantEl.textContent = 'Error de conexión con el servidor.';
+      assistantEl.classList.remove('streaming');
+      setStatus('Error', '');
+      micBtn.classList.remove('thinking');
+      isBusy = false;
+    }
+  }
+
+  // --- TTS ---
+  function speakText(text) {
+    micBtn.classList.remove('thinking');
+
+    if (voiceMuted || !text.trim()) {
+      setStatus('Listo', '');
+      isBusy = false;
+      return;
+    }
+
+    setStatus('Hablando...', 'speaking');
+    micBtn.classList.add('speaking');
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = langSelect.value;
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    currentUtterance = utterance;
+
+    utterance.onend = () => {
+      micBtn.classList.remove('speaking');
+      setStatus('Listo', '');
+      currentUtterance = null;
+      isBusy = false;
+    };
+
+    utterance.onerror = () => {
+      micBtn.classList.remove('speaking');
+      setStatus('Listo', '');
+      currentUtterance = null;
+      isBusy = false;
+    };
+
+    synth.speak(utterance);
+  }
+
+  // --- UI Helpers ---
+  function addMessage(role, text, streaming = false) {
+    const el = document.createElement('div');
+    el.className = `message ${role}${streaming ? ' streaming' : ''}`;
+    el.textContent = text;
+    conv.appendChild(el);
+    conv.scrollTop = conv.scrollHeight;
+    return el;
+  }
+
+  function setStatus(text, cls = '') {
+    statusEl.textContent = text;
+    statusEl.className = cls;
+  }
+
+  // --- Events ---
+  // Click to toggle listening
+  micBtn.addEventListener('click', () => {
+    if (isBusy) return;
+    if (isListening) {
+      stopListening();
+      setStatus('Listo', '');
+    } else {
+      startListening();
+    }
+  });
+
+  // Long-press support for mobile
+  let pressTimer;
+  micBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    pressTimer = setTimeout(() => startListening(), 100);
+  });
+  micBtn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    clearTimeout(pressTimer);
+    if (isListening) {
+      stopListening();
+      setStatus('Procesando...', 'thinking');
+    }
+  });
+
+  muteBtn.addEventListener('click', () => {
+    voiceMuted = !voiceMuted;
+    muteBtn.textContent = voiceMuted ? '🔇 Voz' : '🔊 Voz';
+    if (voiceMuted && currentUtterance) { synth.cancel(); currentUtterance = null; }
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    conv.innerHTML = '<div class="message system">Conversación reiniciada</div>';
+    await fetch(`/session/${sessionId}`, { method: 'DELETE' });
+    if (currentUtterance) { synth.cancel(); currentUtterance = null; }
+    isBusy = false;
+    micBtn.className = '';
+    setStatus('Listo', '');
+  });
+
+  langSelect.addEventListener('change', () => {
+    if (recognition) recognition.lang = langSelect.value;
+  });
+
+  // Keyboard shortcut: Space to start/stop
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target === document.body) {
+      e.preventDefault();
+      if (!isBusy && !isListening) startListening();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space' && e.target === document.body && isListening) {
+      stopListening();
+    }
+  });
+</script>
+</body>
+</html>
